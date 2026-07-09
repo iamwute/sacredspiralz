@@ -227,6 +227,14 @@
 
     <div id="scroll-progress"></div>
 
+    <!-- BOGO Sale Banner (auto-hides after July 31, 2026 — see "BOGO sale" block in the script below) -->
+    <div id="sale-banner" class="relative z-50 bg-gradient-to-r from-amber-500 to-pink-500 text-slate-950 text-center px-4 py-2.5 text-xs sm:text-sm font-bold tracking-wide">
+        ☀️ SUMMER BOGO: Buy 2 shirts, get 1 FREE with code
+        <span class="font-mono bg-slate-950/15 rounded px-1.5 py-0.5 mx-0.5">BOGOSHIRTS</span>
+        through July 31 —
+        <a href="https://valerieartist.myshopify.com/discount/bogoshirts" target="_blank" class="underline underline-offset-2 hover:text-white transition whitespace-nowrap">Shop the sale →</a>
+    </div>
+
     <!-- Navigation -->
     <nav id="mainNav" class="sticky top-0 z-50 p-6 flex flex-col md:flex-row justify-between items-center max-w-7xl mx-auto">
         <a href="#top" class="text-3xl font-extrabold tracking-tighter text-white mb-4 md:mb-0 font-display">
@@ -328,6 +336,29 @@
             </a>
         </div>
 
+        <!-- BOGO Sale Callout (auto-hides after July 31, 2026) -->
+        <div id="sale-callout" class="relative glass-panel rounded-2xl p-6 md:p-8 mb-10 overflow-hidden" data-reveal>
+            <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-pink-500/70 to-transparent"></div>
+            <div class="aurora bg-pink-500 w-72 h-72 -top-24 -right-16" style="opacity:0.18"></div>
+            <div class="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                <div>
+                    <span class="text-pink-400 text-xs font-bold uppercase tracking-wider">Summer Sale · Ends July 31</span>
+                    <h4 class="text-2xl md:text-3xl font-extrabold text-white font-display mt-2">
+                        Buy 2 Shirts, <span class="gradient-text">Get 1 Free</span>
+                    </h4>
+                    <p class="text-slate-400 mt-2 text-sm md:text-base leading-relaxed">
+                        Add any 3 tees to your cart and the third one's on us. Use code
+                        <button type="button" id="copy-code" class="font-mono font-bold text-amber-400 bg-slate-900/70 border border-slate-700 rounded-lg px-2 py-0.5 hover:border-amber-500 transition cursor-pointer" title="Click to copy code">BOGOSHIRTS</button>
+                        <span id="copy-feedback" class="text-emerald-400 text-xs font-bold opacity-0 transition-opacity duration-300">Copied!</span>
+                        at checkout — or hit the button and it's applied for you.
+                    </p>
+                </div>
+                <a href="https://valerieartist.myshopify.com/discount/bogoshirts" target="_blank" class="magnetic shimmer-btn shrink-0 bg-gradient-to-r from-amber-500 to-pink-500 text-slate-950 px-8 py-4 rounded-full font-extrabold text-center transition shadow-lg shadow-pink-900/30">
+                    Shop Shirts · Code Applied
+                </a>
+            </div>
+        </div>
+
         <!-- Filter / search / sort controls -->
         <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-2" data-reveal>
             <div id="type-filters" class="flex flex-wrap gap-2"></div>
@@ -367,6 +398,33 @@
     <script>
         const shopifyStoreUrl = "https://valerieartist.myshopify.com";
         const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        /* ---------- BOGO sale (runs through July 31, 2026) ----------
+           The banner, callout, and product badges all disappear automatically
+           after SALE_END — no need to edit the page when the sale is over.
+           To run a future sale, just update SALE_END and the discount code. */
+        const SALE_END = new Date('2026-08-01T00:00:00');
+        const SALE_CODE = 'bogoshirts';
+        const saleActive = new Date() < SALE_END;
+
+        if (!saleActive) {
+            document.getElementById('sale-banner')?.remove();
+            document.getElementById('sale-callout')?.remove();
+        }
+
+        const copyCodeBtn = document.getElementById('copy-code');
+        if (copyCodeBtn) {
+            copyCodeBtn.addEventListener('click', async () => {
+                try {
+                    await navigator.clipboard.writeText(SALE_CODE.toUpperCase());
+                    const fb = document.getElementById('copy-feedback');
+                    if (fb) {
+                        fb.classList.remove('opacity-0');
+                        setTimeout(() => fb.classList.add('opacity-0'), 1600);
+                    }
+                } catch (e) { /* clipboard unavailable — code is still visible to type */ }
+            });
+        }
 
         /* ---------- Scroll progress + nav state ---------- */
         const progressBar = document.getElementById('scroll-progress');
@@ -634,7 +692,11 @@
             }
 
             products.forEach((product, i) => {
-                const productUrl = `${shopifyStoreUrl}/products/${product.handle}`;
+                // While the BOGO sale is on, shirt links go through the discount URL so the code is auto-applied at checkout
+                const onSale = saleActive && product.type === 'T-Shirt';
+                const productUrl = onSale
+                    ? `${shopifyStoreUrl}/discount/${SALE_CODE}?redirect=/products/${product.handle}`
+                    : `${shopifyStoreUrl}/products/${product.handle}`;
                 const imageUrl = product.image ? product.image : `https://placehold.co/600x600/334155/f8fafc?text=${encodeURIComponent(product.title.split(' ').slice(0, 2).join(' '))}`;
 
                 const card = document.createElement('div');
@@ -643,6 +705,7 @@
                 card.style.setProperty('--reveal-delay', (i % 4) * 90 + 'ms');
                 card.innerHTML = `
                     <div class="bg-slate-800 aspect-square rounded-xl mb-4 overflow-hidden relative">
+                        ${onSale ? '<span class="absolute top-3 left-3 z-10 bg-gradient-to-r from-amber-500 to-pink-500 text-slate-950 text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-lg">Buy 2 Get 1 Free</span>' : ''}
                         <img src="${imageUrl}" alt="${product.title}" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition duration-500">
                     </div>
                     <h4 class="font-bold text-white mb-1 text-sm leading-snug">${product.title}</h4>
