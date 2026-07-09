@@ -328,6 +328,27 @@
             </a>
         </div>
 
+        <!-- Filter / search / sort controls -->
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-2" data-reveal>
+            <div id="type-filters" class="flex flex-wrap gap-2"></div>
+            <div class="flex gap-3 w-full lg:w-auto">
+                <div class="relative flex-1 lg:flex-none">
+                    <svg class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    <input id="product-search" type="text" placeholder="Search products…" class="w-full lg:w-56 bg-slate-900/60 border border-slate-700 rounded-full pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-pink-500 transition">
+                </div>
+                <div class="relative">
+                    <select id="sort-select" class="appearance-none bg-slate-900/60 border border-slate-700 rounded-full pl-4 pr-10 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500 transition cursor-pointer">
+                        <option value="featured">Featured</option>
+                        <option value="price-asc">Price: Low to High</option>
+                        <option value="price-desc">Price: High to Low</option>
+                        <option value="name-asc">Name: A–Z</option>
+                    </select>
+                    <svg class="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </div>
+            </div>
+        </div>
+        <div id="results-count" class="text-sm text-slate-500 mb-6 min-h-[1.25rem]"></div>
+
         <!-- The Javascript below will inject all products from the CSV into this container -->
         <div id="product-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"></div>
     </section>
@@ -412,6 +433,100 @@
             card.addEventListener('mouseleave', () => { card.style.transform = ''; });
         }
 
+        /* ---------- Product filtering / sorting state ---------- */
+        let allProducts = [];
+        let activeType = 'All';
+        let sortMode = 'featured';
+        let searchQuery = '';
+
+        function normalizeType(rawType, title) {
+            const t = (rawType || '').trim();
+            if (!t) {
+                if (/garden flag/i.test(title)) return 'Garden Flag';
+                return 'Other';
+            }
+            if ((t === 'All Over Prints' || t === 'Home Decor') && /blanket|throw/i.test(title)) return 'Blanket';
+            return t;
+        }
+
+        function buildTypeFilters(products) {
+            const counts = {};
+            products.forEach(p => { counts[p.type] = (counts[p.type] || 0) + 1; });
+            const types = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+            const container = document.getElementById('type-filters');
+
+            const pillClass = (active) => 'filter-pill px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wide transition ' +
+                (active ? 'bg-gradient-to-r from-amber-500 to-pink-500 text-slate-950' : 'bg-slate-900/60 border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500');
+
+            let html = `<button type="button" data-type="All" class="${pillClass(activeType === 'All')}">All <span class="opacity-70">(${products.length})</span></button>`;
+            types.forEach(t => {
+                html += `<button type="button" data-type="${t}" class="${pillClass(activeType === t)}">${t} <span class="opacity-70">(${counts[t]})</span></button>`;
+            });
+            container.innerHTML = html;
+
+            container.querySelectorAll('button').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    activeType = btn.getAttribute('data-type');
+                    buildTypeFilters(allProducts);
+                    applyFilters();
+                });
+            });
+        }
+
+        function sortProductList(list, mode) {
+            const arr = [...list];
+            switch (mode) {
+                case 'price-asc':
+                    arr.sort((a, b) => (a.priceValue ?? Infinity) - (b.priceValue ?? Infinity));
+                    break;
+                case 'price-desc':
+                    arr.sort((a, b) => (b.priceValue ?? -Infinity) - (a.priceValue ?? -Infinity));
+                    break;
+                case 'name-asc':
+                    arr.sort((a, b) => a.title.localeCompare(b.title));
+                    break;
+            }
+            return arr;
+        }
+
+        function updateResultsCount(n) {
+            const el = document.getElementById('results-count');
+            if (!el) return;
+            el.textContent = (activeType === 'All' && !searchQuery) ? '' : `${n} product${n === 1 ? '' : 's'} found`;
+        }
+
+        function applyFilters() {
+            let filtered = allProducts.filter(p => activeType === 'All' || p.type === activeType);
+            if (searchQuery) {
+                const q = searchQuery.toLowerCase();
+                filtered = filtered.filter(p => p.title.toLowerCase().includes(q));
+            }
+            filtered = sortProductList(filtered, sortMode);
+            renderProducts(filtered);
+            updateResultsCount(filtered.length);
+        }
+
+        function clearFilters() {
+            activeType = 'All';
+            searchQuery = '';
+            sortMode = 'featured';
+            const searchEl = document.getElementById('product-search');
+            const sortEl = document.getElementById('sort-select');
+            if (searchEl) searchEl.value = '';
+            if (sortEl) sortEl.value = 'featured';
+            buildTypeFilters(allProducts);
+            applyFilters();
+        }
+
+        document.getElementById('product-search').addEventListener('input', (e) => {
+            searchQuery = e.target.value.trim();
+            applyFilters();
+        });
+        document.getElementById('sort-select').addEventListener('change', (e) => {
+            sortMode = e.target.value;
+            applyFilters();
+        });
+
         /* ---------- CSV product loading ---------- */
         function parseCSV(str) {
             const arr = [];
@@ -462,6 +577,7 @@
                 const priceIndex = headers.indexOf('Variant Price');
                 const handleIndex = headers.indexOf('Handle');
                 const imageIndex = headers.indexOf('Image Src');
+                const typeIndex = headers.indexOf('Type');
 
                 const products = [];
                 const seenHandles = new Set();
@@ -476,23 +592,24 @@
                     if (handle && title && !seenHandles.has(handle)) {
                         seenHandles.add(handle);
 
-                        let priceText = row[priceIndex];
-                        if (priceText) {
-                            priceText = "$" + parseFloat(priceText).toFixed(2);
-                        } else {
-                            priceText = "View Product";
-                        }
+                        const priceRaw = row[priceIndex];
+                        const priceValue = priceRaw ? parseFloat(priceRaw) : null;
+                        const priceText = (priceValue !== null && !isNaN(priceValue)) ? "$" + priceValue.toFixed(2) : "View Product";
 
                         products.push({
                             title: title,
                             price: priceText,
+                            priceValue: priceValue,
                             handle: handle,
-                            image: imageIndex !== -1 && row[imageIndex] ? row[imageIndex] : null
+                            image: imageIndex !== -1 && row[imageIndex] ? row[imageIndex] : null,
+                            type: normalizeType(typeIndex !== -1 ? row[typeIndex] : '', title)
                         });
                     }
                 }
 
-                renderProducts(products);
+                allProducts = products;
+                buildTypeFilters(allProducts);
+                applyFilters();
 
             } catch (error) {
                 console.error("Error loading products:", error);
@@ -510,7 +627,9 @@
             grid.innerHTML = '';
 
             if (products.length === 0) {
-                grid.innerHTML = '<div class="col-span-full text-center py-12 text-slate-400">No products found in the CSV.</div>';
+                grid.innerHTML = '<div class="col-span-full text-center py-16 text-slate-400">No products match your filters. <button type="button" id="clear-filters" class="text-amber-500 font-bold hover:underline ml-1">Clear filters</button></div>';
+                const clearBtn = document.getElementById('clear-filters');
+                if (clearBtn) clearBtn.addEventListener('click', clearFilters);
                 return;
             }
 
